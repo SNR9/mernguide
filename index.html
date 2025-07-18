@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MERN Stack Learning Adventure</title>
+    <!-- Chosen Palette: "Candy Game" - A playful and vibrant palette with bright, saturated colors for levels and interactions, set against a fun, patterned background. -->
+    <!-- Application Structure Plan: The application has been redesigned from a linear timeline into a gamified, grid-based level map, similar to Candy Crush. This structure promotes a sense of progression and achievement. Each roadmap step is a "level" that is initially locked. Completing a level unlocks the next, creating a clear and motivating path for the user. The user flow is to move sequentially through the map, level by level. Clicking an unlocked level opens a modal with the detailed learning content and AI tools, keeping the core educational purpose intact while wrapping it in a game-like experience. This structure was chosen to make learning more engaging and less intimidating. -->
+    <!-- Visualization & Content Choices: 
+        1. Level Map: The primary visualization is the grid of levels, built with HTML/CSS. Goal: Organize the roadmap into a fun, game-like progression. Interaction: Clicking an unlocked level opens a detail modal. Justification: This is highly engaging and intuitive for a learning game.
+        2. Level State (Locked/Unlocked/Complete): Visual cues (color, icons, animations) clearly indicate the state of each level. Goal: Inform the user of their progress and what to do next. Presentation: CSS classes dynamically applied with JavaScript. Justification: Provides immediate visual feedback, which is crucial for a game-like feel.
+        3. Detailed Content Modal: When a level is clicked, a modal displays the detailed information. Goal: Provide deep educational content without cluttering the main map. Interaction: Modal can be opened and closed. Justification: Separates the game interface from the dense learning material, improving focus.
+        4. AI Features & Resources: The "Explain" and "Generate Ideas" buttons remain within the modal. A new "Recommended Resources" section links to external learning materials. Goal: Enhance learning with AI and curated content. Interaction: Buttons trigger Gemini API calls or open new tabs. The "Explain" feature includes Web Speech API for voice narration. Justification: Adds powerful, on-demand auditory, visual, and textual learning support.
+        5. Reward Animations: CSS animations provide a rewarding "Level Complete" and a final "MERN Master" celebration. Goal: Increase user motivation and engagement. Justification: Positive reinforcement is a key element of gamification.
+        CONFIRMING NO SVG/Mermaid. All visuals are achieved through HTML/CSS and Unicode characters. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f9ff;
+            background-image:
+                radial-gradient(circle at 100% 100%, #ffffff22, #ffffff00 25%),
+                radial-gradient(circle at 0% 0%, #ffffff22, #ffffff00 25%),
+                linear-gradient(135deg, #60a5fa, #3b82f6);
+        }
+        .game-header h1 {
+            font-family: 'Fredoka One', cursive;
+            text-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+        }
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 2rem;
+            padding: 2rem;
+        }
+        .level-node {
+            aspect-ratio: 1 / 1;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            perspective: 1000px;
+        }
+        .level-node .level-content {
+            transition: transform 0.5s;
+            transform-style: preserve-3d;
+        }
+        .level-node.is-flipped .level-content {
+            transform: rotateY(180deg);
+        }
+        .level-front, .level-back {
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .level-back {
+            transform: rotateY(180deg);
+        }
+        .level-node.unlocked:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        .level-node.locked {
+            cursor: not-allowed;
+            filter: grayscale(80%);
+        }
+        .level-node.completed .level-front {
+             background: linear-gradient(145deg, #6d28d9, #9d5dff);
+        }
+        .level-node.completed .level-icon {
+            font-size: 3rem;
+            animation: bounce 0.6s ease-in-out;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+        .level-node.unlocked .level-front {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+        }
+        .detail-modal { display: none; }
+        .detail-modal.show { display: flex; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Reward Animation Styles */
+        .reward-overlay {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .reward-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+        .reward-message {
+            font-family: 'Fredoka One', cursive;
+            animation: zoomInAndOut 2.5s ease-in-out forwards;
+        }
+        @keyframes zoomInAndOut {
+            0% { transform: scale(0); opacity: 0; }
+            10% { transform: scale(1.2); opacity: 1; }
+            90% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fde047;
+            border-radius: 50%;
+            animation: fall 3s linear forwards;
+        }
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8 game-header">
+            <h1 class="text-5xl md:text-7xl font-bold text-white mb-2">MERN Learning Adventure</h1>
+            <p class="text-lg text-blue-100 font-medium">Level up your skills by completing each stage of the roadmap!</p>
+        </header>
+
+        <main id="level-map-container" class="bg-white/50 backdrop-blur-sm rounded-2xl shadow-2xl p-4 md:p-8">
+            <div id="level-grid" class="level-grid">
+                <!-- Levels will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="detail-modal fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col transform transition-transform duration-300 scale-95">
+            <div id="modal-header" class="p-4 border-b flex justify-between items-center">
+                <h3 id="modal-title" class="text-xl font-bold text-gray-800 flex items-center"></h3>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl font-bold">&times;</button>
+            </div>
+            <div id="modal-content" class="p-6 overflow-y-auto">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Reward Animation Overlay -->
+    <div id="reward-overlay" class="reward-overlay fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50 overflow-hidden">
+        <h2 id="reward-message" class="reward-message text-6xl md:text-8xl text-white font-bold text-center" style="text-shadow: 4px 4px 0 #9333ea;"></h2>
+    </div>
+
+    <script>
+        const roadmapData = [
+            {
+                category: "Foundations",
+                title: "HTML, CSS, & Modern JavaScript",
+                icon: '🏗️',
+                color: 'bg-red-500',
+                concepts: [
+                    { name: "Semantic HTML", desc: "Semantic HTML means using HTML tags for their intended purpose. This gives your content meaning and structure, crucial for accessibility (screen readers), SEO (search engines), and maintainability. Key elements include `<header>`, `<nav>`, `<main>`, `<article>`, `<section>`, `<footer>`, and `<aside>`." },
+                    { name: "CSS Flexbox & Grid", desc: "Modern CSS provides two powerful layout systems. **Flexbox** is for one-dimensional layouts (a row or a column). **CSS Grid** is for two-dimensional layouts (rows and columns simultaneously). Mastering both is key for responsive design." },
+                    { name: "JavaScript ES6+", desc: "ES6 (ECMAScript 2015) revolutionized JavaScript. Key features include: `let` and `const` for block-scoped variables, **Arrow Functions** for a concise syntax, **Promises** and `async/await` for handling asynchronous operations cleanly, and **Modules** (`import`/`export`) for organizing code." },
+                    { name: "DOM Manipulation", desc: "The Document Object Model (DOM) is the browser's API for your HTML. JavaScript can manipulate it to create dynamic web pages using methods like `querySelector()`, `.classList.add/remove()`, and `createElement()`." }
+                ],
+                project: { name: "Responsive Portfolio Website", goal: "Build a beautiful, multi-page portfolio from scratch to showcase your skills." },
+                resources: [
+                    { name: "MDN: Learn Web Development", url: "https://developer.mozilla.org/en-US/docs/Learn" },
+                    { name: "freeCodeCamp: Responsive Web Design", url: "https://www.freecodecamp.org/learn/2022/responsive-web-design/" },
+                    { name: "The Odin Project: Foundations", url: "https://www.theodinproject.com/paths/foundations/courses/foundations" }
+                ]
+            },
+            {
+                category: "Foundations",
+                title: "Package Managers",
+                icon: '📦',
+                color: 'bg-orange-500',
+                concepts: [
+                    { name: "The `package.json` file", desc: "This file is the heart of any Node.js project. It contains metadata (name, version) and lists all project dependencies. `npm init` generates this file." },
+                    { name: "Dependencies vs. DevDependencies", desc: "`dependencies` are required for the app to run in production (e.g., Express). `devDependencies` are only for development (e.g., Jest). This keeps your production build lean." },
+                    { name: "Scripts", desc: "The `scripts` section in `package.json` allows you to define command-line shortcuts for common tasks, like `npm start` to run your app." },
+                    { name: "Lock Files", desc: "`package-lock.json` (npm) or `yarn.lock` lock down the exact versions of all dependencies, ensuring every developer on the team has the identical setup." }
+                ],
+                project: { name: "CLI Greeting Tool", goal: "Create a command-line tool that displays a customized, styled greeting." },
+                resources: [
+                    { name: "Node.js Docs: npm Introduction", url: "https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager" },
+                    { name: "npm Docs: package.json", url: "https://docs.npmjs.com/cli/v10/configuring-npm/package-json" }
+                ]
+            },
+            {
+                category: "Backend",
+                title: "Node.js Fundamentals",
+                icon: '⚙️',
+                color: 'bg-yellow-500',
+                concepts: [
+                    { name: "The Event Loop", desc: "Node.js uses a single-threaded, non-blocking I/O model. The Event Loop allows Node.js to handle many concurrent operations efficiently by offloading heavy tasks and executing their callbacks once complete, without blocking the main thread." },
+                    { name: "Core Modules", desc: "Node.js has powerful built-in modules. The `http` module creates web servers, `fs` (File System) interacts with files, and `path` helps work with file paths in a cross-platform way." },
+                    { name: "Asynchronous Programming", desc: "This is the core paradigm of Node.js. You must master asynchronous patterns, starting with callbacks, evolving to `Promises` for cleaner control flow, and culminating in `async/await` syntax for readable, modern code." }
+                ],
+                project: { name: "Local File Manager CLI", goal: "Build a tool to list, read, and write files on your local machine." },
+                resources: [
+                    { name: "Node.js Docs: The Event Loop", url: "https://nodejs.org/en/learn/asynchronous-work/the-nodejs-event-loop" },
+                    { name: "freeCodeCamp: Node.js Handbook", url: "https://www.freecodecamp.org/news/the-nodejs-handbook/" }
+                ]
+            },
+            {
+                category: "Backend",
+                title: "Express.js",
+                icon: '🚀',
+                color: 'bg-lime-500',
+                concepts: [
+                    { name: "Routing", desc: "Routing determines how an application responds to a client request to a particular endpoint (a URI and a specific HTTP method like GET or POST). Express provides methods like `app.get()`, `app.post()` etc. to handle these." },
+                    { name: "Middleware", desc: "Middleware functions have access to the request (`req`), response (`res`), and the `next` function. They can execute code, make changes, end the cycle, or call the next middleware. Used for logging, authentication, and parsing request bodies." },
+                    { name: "RESTful API Structure", desc: "REST is an architectural style for designing networked applications. A RESTful API uses standard HTTP methods (GET, POST, PUT, DELETE) to perform CRUD (Create, Read, Update, Delete) operations on resources." }
+                ],
+                project: { name: "Bookstore API", goal: "Create a complete RESTful API for a bookstore with CRUD functionality." },
+                resources: [
+                    { name: "Express.js Official Guide", url: "https://expressjs.com/en/guide/routing.html" },
+                    { name: "MDN: Express/Node introduction", url: "https://developer.mozilla.org/en-US/docs/Learn/Server-side/Express_Nodejs" }
+                ]
+            },
+            {
+                category: "Backend",
+                title: "MongoDB & Mongoose",
+                icon: '🍃',
+                color: 'bg-green-500',
+                concepts: [
+                    { name: "NoSQL Concepts", desc: "MongoDB is a NoSQL database, storing data in flexible, JSON-like documents within collections. This allows for a more dynamic and scalable data structure that often maps directly to application objects." },
+                    { name: "MongoDB Atlas", desc: "Atlas is MongoDB's official cloud database service. It provides a fully managed, distributed database, handling complex administrative tasks like configuration, scaling, and backups." },
+                    { name: "Mongoose Schemas & Models", desc: "Mongoose is an Object Data Modeling (ODM) library. A **Schema** defines the structure of your documents (fields, types, validation). A **Model** is a constructor compiled from a Schema that provides an interface to the database for CRUD operations." }
+                ],
+                project: { name: "User Profile Manager", goal: "Build an API to manage user profiles, storing all data in MongoDB." },
+                resources: [
+                    { name: "MongoDB University: Introduction", url: "https://learn.mongodb.com/courses/m001-mongodb-basics" },
+                    { name: "Mongoose Docs: Quick Start", url: "https://mongoosejs.com/docs/index.html" }
+                ]
+            },
+            {
+                category: "Backend",
+                title: "Authentication",
+                icon: '🔐',
+                color: 'bg-emerald-500',
+                concepts: [
+                    { name: "Password Hashing", desc: "Never store passwords in plain text. Hashing is a one-way process. `bcrypt` is a popular library that hashes and 'salts' passwords, making it extremely difficult to reverse-engineer." },
+                    { name: "JSON Web Tokens (JWT)", desc: "JWT is a standard for creating access tokens. When a user logs in, the server creates a signed JWT and sends it to the client. The client includes this token in future requests to prove they are authenticated." },
+                    { name: "Protected Routes", desc: "To secure your API, you create middleware that checks for a valid JWT on incoming requests. If the token is valid, the request proceeds; otherwise, an error is sent." }
+                ],
+                project: { name: "Auth System for API", goal: "Integrate a complete authentication system into your API." },
+                resources: [
+                    { name: "JWT.io Introduction", url: "https://jwt.io/introduction" },
+                    { name: "DigitalOcean: JWT Authentication Tutorial", url: "https://www.digitalocean.com/community/tutorials/nodejs-jwt-authentication" }
+                ]
+            },
+            {
+                category: "Frontend",
+                title: "React.js Fundamentals",
+                icon: '⚛️',
+                color: 'bg-teal-500',
+                concepts: [
+                    { name: "JSX & Components", desc: "JSX (JavaScript XML) lets you write HTML-like markup inside JavaScript. A **Component** is a reusable, self-contained piece of UI. Modern React focuses on functional components." },
+                    { name: "Props vs. State", desc: "**Props** pass data down from a parent to a child (read-only). **State** is data managed *within* a component that can change over time, causing the component to re-render." },
+                    { name: "Core Hooks: `useState` & `useEffect`", desc: "Hooks add features to functional components. `useState` adds state. `useEffect` handles 'side effects,' like fetching data from an API or manually changing the DOM." }
+                ],
+                project: { name: "To-Do App", goal: "Build a classic To-Do application to master state management." },
+                resources: [
+                    { name: "React.dev: Official Tutorial", url: "https://react.dev/learn" },
+                    { name: "Scrimba: Learn React for Free", url: "https://scrimba.com/learn/learnreact" }
+                ]
+            },
+            {
+                category: "Frontend",
+                title: "React State Management",
+                icon: '🧠',
+                color: 'bg-cyan-500',
+                concepts: [
+                    { name: "Context API", desc: "React's built-in solution for sharing state across the app without 'prop drilling'. You create a `Context`, provide a value, and consume it in any child component with the `useContext` hook." },
+                    { name: "useReducer", desc: "A built-in hook preferable to `useState` for complex state logic. You dispatch actions to a reducer function to calculate the next state, similar to Redux." },
+                    { name: "Zustand", desc: "A popular, small, and fast state-management library. It provides a simple hook-based API and is often considered a much simpler alternative to Redux." }
+                ],
+                project: { name: "Theme Manager", goal: "Create an app with a global light/dark theme toggle using Context API." },
+                resources: [
+                    { name: "React.dev Docs: Sharing State", url: "https://react.dev/learn/sharing-state-between-components" },
+                    { name: "Zustand GitHub Docs", url: "https://github.com/pmndrs/zustand" }
+                ]
+            },
+            {
+                category: "Frontend",
+                title: "React Router",
+                icon: '🗺️',
+                color: 'bg-sky-500',
+                concepts: [
+                    { name: "Client-Side Routing", desc: "In a Single-Page Application (SPA), React Router intercepts navigation. It changes the URL and renders new components without a full page refresh, creating a faster experience." },
+                    { name: "Dynamic Routes", desc: "Allows you to create a single route that displays different content based on a URL parameter (e.g., `/users/:userId`). You can access the parameter with the `useParams` hook." },
+                    { name: "Nested Routes & Layouts", desc: "Allows you to group related routes and share a common UI layout. A parent route can render a layout, and an `<Outlet>` component renders the appropriate child route." }
+                ],
+                project: { name: "Travel Blog", goal: "Build a blog with a homepage and individual post pages using dynamic routes." },
+                resources: [
+                    { name: "React Router Docs: Main Concepts", url: "https://reactrouter.com/en/main/start/concepts" },
+                    { name: "freeCodeCamp: React Router v6 Tutorial", url: "https://www.freecodecamp.org/news/react-router-v6-tutorial/" }
+                ]
+            },
+            {
+                category: "Full Stack",
+                title: "Consuming REST APIs",
+                icon: '🔗',
+                color: 'bg-blue-500',
+                concepts: [
+                    { name: "Fetch API / Axios", desc: "To get data from your backend, your React app needs to make HTTP requests. The browser's `fetch` API can do this, but many prefer the `axios` library for its simpler API and better error handling." },
+                    { name: "Loading & Error States", desc: "A good UX requires handling all network request states. Use state variables (e.g., `loading`, `error`) to display a loading spinner or an error message." },
+                    { name: "Data Fetching with `useEffect`", desc: "The standard pattern is to call your fetching function inside a `useEffect` hook with an empty dependency array (`[]`). This ensures data is fetched only once when the component mounts." }
+                ],
+                project: { name: "Weather Dashboard", goal: "Build a dashboard that fetches and displays data from a public weather API." },
+                resources: [
+                    { name: "MDN Docs: Fetch API", url: "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API" },
+                    { name: "Axios Docs", url: "https://axios-http.com/docs/intro" }
+                ]
+            },
+            {
+                category: "Full Stack",
+                title: "Full Stack MERN App",
+                icon: '🏆',
+                color: 'bg-indigo-500',
+                concepts: [
+                    { name: "Connecting Frontend to Backend", desc: "Your React app and Express server run on different ports. Enable CORS on your Express server using the `cors` middleware to allow them to communicate." },
+                    { name: "Full CRUD Lifecycle", desc: "Create the complete user flow for all CRUD operations. For example, a form in React triggers a POST request, the backend saves to MongoDB, and React updates the UI." },
+                    { name: "Token-based Authentication Flow", desc: "The React client must store the JWT after login and include it in the `Authorization` header of every request to protected API endpoints." }
+                ],
+                project: { name: "Blog CMS", goal: "Build a full Content Management System where an admin can create, edit, and delete posts." },
+                resources: [
+                    { name: "freeCodeCamp: MERN Stack Course", url: "https://www.freecodecamp.org/news/mern-stack-course-2021/" },
+                    { name: "Full-Stack Open (University of Helsinki)", url: "https://fullstackopen.com/en/" }
+                ]
+            },
+            {
+                category: "DevOps",
+                title: "Git & GitHub",
+                icon: '📚',
+                color: 'bg-violet-500',
+                concepts: [
+                    { name: "Version Control with Git", desc: "Git is a distributed version control system that tracks changes to your files. Key commands include `git add`, `git commit`, `git status`, and `git log`." },
+                    { name: "Branching & Merging", desc: "Branches are independent lines of development. You create a new branch to work on a feature without affecting the main codebase (`main`). When complete, you integrate it back using `git merge`." },
+                    { name: "Collaboration with GitHub & Pull Requests", desc: "GitHub hosts your Git repositories. The standard workflow is: push your feature branch to GitHub, open a **Pull Request (PR)** to propose merging, allow teammates to review, and then merge the PR." }
+                ],
+                project: { name: "Version Control All Projects", goal: "Create a GitHub repository for every project you've built so far." },
+                resources: [
+                    { name: "GitHub Docs: Git Handbook", url: "https://docs.github.com/en/get-started/using-git/about-git" },
+                    { name: "Atlassian Git Tutorial", url: "https://www.atlassian.com/git" }
+                ]
+            },
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const levelGrid = document.getElementById('level-grid');
+            const modal = document.getElementById('detail-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            const rewardOverlay = document.getElementById('reward-overlay');
+            const rewardMessage = document.getElementById('reward-message');
+            
+            let completedLevels = JSON.parse(localStorage.getItem('completedMernLevels')) || [];
+
+            const showModal = () => {
+                modal.classList.add('show');
+                setTimeout(() => modal.querySelector('.bg-white').classList.remove('scale-95'), 10);
+            };
+            const hideModal = () => {
+                speechSynthesis.cancel(); // Stop any speech on modal close
+                modal.querySelector('.bg-white').classList.add('scale-95');
+                setTimeout(() => modal.classList.remove('show'), 300);
+            };
+
+            const triggerReward = (message) => {
+                rewardMessage.textContent = message;
+                rewardOverlay.classList.add('show');
+
+                // Confetti
+                for (let i = 0; i < 100; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    const colors = ['#fde047', '#f97316', '#ec4899', '#8b5cf6', '#3b82f6'];
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.animationDuration = Math.random() * 2 + 3 + 's';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    rewardOverlay.appendChild(confetti);
+                }
+
+                setTimeout(() => {
+                    rewardOverlay.classList.remove('show');
+                    rewardOverlay.innerHTML = ''; // Clear confetti
+                    rewardOverlay.appendChild(rewardMessage); // Add message back
+                }, 2500);
+            };
+
+            closeModalBtn.addEventListener('click', hideModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) hideModal();
+            });
+
+            async function callGemini(prompt, title, addVoiceControls = false) {
+                modalContent.innerHTML = '<div class="flex justify-center items-center p-8"><div class="loader"></div></div>';
+                modalTitle.innerHTML = `<span class="mr-3 text-2xl">${title.split(' ')[0]}</span> ${title.substring(title.indexOf(' ') + 1)}`;
+                
+                const apiKey = ""; // Injected by environment
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                    const result = await response.json();
+                    const rawText = result.candidates[0].content.parts[0].text;
+                    const formattedText = rawText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code class="bg-gray-200 text-sm p-1 rounded">$1</code>').replace(/\n/g, '<br>');
+
+                    let finalHtml = `<div class="prose max-w-none p-2">${formattedText}</div>`;
+
+                    if (addVoiceControls) {
+                        const voiceControlsHTML = `
+                            <div id="voice-controls" class="mt-4 p-3 bg-gray-200 rounded-lg flex items-center gap-3">
+                                <button id="speak-btn" class="flex items-center justify-center text-sm font-semibold py-2 px-3 rounded-lg transition-colors bg-blue-500 text-white hover:bg-blue-600"><span class="mr-2">🔊</span>Read Aloud</button>
+                                <button id="pause-btn" class="flex items-center justify-center text-sm font-semibold py-2 px-3 rounded-lg transition-colors bg-yellow-500 text-white hover:bg-yellow-600 hidden"><span class="mr-2">⏸️</span>Pause</button>
+                                <button id="resume-btn" class="flex items-center justify-center text-sm font-semibold py-2 px-3 rounded-lg transition-colors bg-green-500 text-white hover:bg-green-600 hidden"><span class="mr-2">▶️</span>Resume</button>
+                                <button id="stop-btn" class="flex items-center justify-center text-sm font-semibold py-2 px-3 rounded-lg transition-colors bg-red-500 text-white hover:bg-red-600"><span class="mr-2">⏹️</span>Stop</button>
+                            </div>
+                        `;
+                        finalHtml += voiceControlsHTML;
+                    }
+                    
+                    modalContent.innerHTML = finalHtml;
+
+                    if (addVoiceControls) {
+                        const speakBtn = document.getElementById('speak-btn');
+                        const pauseBtn = document.getElementById('pause-btn');
+                        const resumeBtn = document.getElementById('resume-btn');
+                        const stopBtn = document.getElementById('stop-btn');
+
+                        const resetVoiceUI = () => {
+                            speakBtn.classList.remove('hidden');
+                            pauseBtn.classList.add('hidden');
+                            resumeBtn.classList.add('hidden');
+                        };
+
+                        speakBtn.onclick = () => {
+                            const utterance = new SpeechSynthesisUtterance(rawText);
+                            utterance.onend = resetVoiceUI;
+                            speechSynthesis.cancel();
+                            speechSynthesis.speak(utterance);
+                            speakBtn.classList.add('hidden');
+                            pauseBtn.classList.remove('hidden');
+                        };
+
+                        pauseBtn.onclick = () => {
+                            speechSynthesis.pause();
+                            pauseBtn.classList.add('hidden');
+                            resumeBtn.classList.remove('hidden');
+                        };
+
+                        resumeBtn.onclick = () => {
+                            speechSynthesis.resume();
+                            resumeBtn.classList.add('hidden');
+                            pauseBtn.classList.remove('hidden');
+                        };
+
+                        stopBtn.onclick = () => {
+                            speechSynthesis.cancel();
+                            resetVoiceUI();
+                        };
+                    }
+
+                } catch (error) {
+                    console.error("Gemini API error:", error);
+                    modalContent.textContent = 'An error occurred. Please try again.';
+                }
+            }
+            
+            function renderLevels() {
+                levelGrid.innerHTML = '';
+                roadmapData.forEach((item, index) => {
+                    const isCompleted = completedLevels.includes(index);
+                    const isUnlocked = index === 0 || completedLevels.includes(index - 1);
+                    const levelNode = document.createElement('div');
+                    levelNode.className = `level-node relative rounded-2xl shadow-lg ${isUnlocked ? 'unlocked' : 'locked' } ${isCompleted ? 'completed' : ''}`;
+                    levelNode.dataset.index = index;
+                    
+                    levelNode.innerHTML = `
+                        <div class="level-content w-full h-full">
+                            <div class="level-front absolute w-full h-full ${item.color} rounded-2xl flex flex-col items-center justify-center text-white p-2 text-center cursor-pointer shadow-inner">
+                                <div class="level-icon text-4xl">${isCompleted ? '✔️' : item.icon}</div>
+                                <div class="font-bold mt-2 text-sm">${item.title}</div>
+                                <div class="absolute top-2 left-2 bg-white/30 text-black text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full">${index + 1}</div>
+                                ${!isUnlocked ? '<div class="absolute inset-0 bg-black/70 flex items-center justify-center rounded-2xl"><span class="text-4xl">🔒</span></div>' : ''}
+                            </div>
+                        </div>
+                    `;
+                    levelGrid.appendChild(levelNode);
+                });
+            }
+
+            levelGrid.addEventListener('click', (e) => {
+                const levelNode = e.target.closest('.level-node.unlocked');
+                if (!levelNode) return;
+
+                const index = parseInt(levelNode.dataset.index);
+                const item = roadmapData[index];
+                const isCompleted = completedLevels.includes(index);
+
+                modalTitle.innerHTML = `<span class="mr-3 text-2xl">${item.icon}</span> ${item.title}`;
+                modalContent.innerHTML = `
+                    <div class="space-y-6">
+                        <!-- Key Concepts Section -->
+                        <div class="bg-gray-100 rounded-lg p-4">
+                            <h4 class="font-bold text-lg text-gray-800 mb-3 flex items-center"><span class="text-xl mr-2">💡</span>Key Concepts</h4>
+                            <div class="space-y-2">
+                                ${item.concepts.map(c => `
+                                    <div class="bg-white p-3 rounded-md shadow-sm">
+                                        <strong class="font-semibold text-gray-700">${c.name}</strong>
+                                        <p class="text-sm text-gray-600 mt-1">${c.desc}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Project Spotlight Section -->
+                        <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 rounded-r-lg">
+                            <h4 class="font-bold text-lg mb-2 flex items-center"><span class="text-xl mr-2">🎯</span>Project Spotlight: ${item.project.name}</h4>
+                            <p class="text-sm">${item.project.goal}</p>
+                        </div>
+                        
+                        <!-- Recommended Resources Section -->
+                        <div class="bg-green-100 border-l-4 border-green-500 p-4 rounded-r-lg">
+                             <h4 class="font-bold text-lg text-green-800 mb-3 flex items-center"><span class="text-xl mr-2">📚</span>Recommended Resources</h4>
+                             <div class="space-y-2">
+                                ${item.resources.map(r => `
+                                    <a href="${r.url}" target="_blank" rel="noopener noreferrer" class="block bg-white p-3 rounded-md shadow-sm text-blue-600 hover:bg-blue-50 hover:text-blue-800 font-semibold transition-colors">
+                                        ${r.name} ↗
+                                    </a>
+                                `).join('')}
+                             </div>
+                        </div>
+
+                        <!-- AI Power-Ups Section -->
+                        <div class="bg-purple-100 border-l-4 border-purple-500 p-4 rounded-r-lg">
+                             <h4 class="font-bold text-lg text-purple-800 mb-3 flex items-center"><span class="text-xl mr-2">✨</span>AI Power-Ups</h4>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <button class="ai-explain-btn flex items-center justify-center text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-purple-500 text-white hover:bg-purple-600 w-full" data-index="${index}"><span class="mr-2">🧠</span>Explain It</button>
+                                <button class="ai-ideas-btn flex items-center justify-center text-sm font-semibold py-2 px-4 rounded-lg transition-colors bg-orange-500 text-white hover:bg-orange-600 w-full" data-index="${index}"><span class="mr-2">💡</span>More Ideas</button>
+                            </div>
+                        </div>
+
+                        <!-- Completion Button -->
+                        <div class="pt-4 border-t text-center">
+                            <button class="complete-btn text-lg font-bold py-3 px-8 rounded-full transition-transform hover:scale-105 ${isCompleted ? 'bg-gray-400 text-white' : 'bg-green-500 text-white'}" data-index="${index}">
+                                ${isCompleted ? 'Mark as Incomplete' : 'Level Complete!'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                showModal();
+            });
+
+            modalContent.addEventListener('click', (e) => {
+                const button = e.target.closest('button');
+                if (!button) return;
+
+                const index = parseInt(button.dataset.index);
+                const item = roadmapData[index];
+
+                if (button.classList.contains('ai-explain-btn')) {
+                    const prompt = `Explain the key concepts for "${item.title}" like I'm 10, using a simple analogy. Concepts: ${item.concepts.map(c => c.name).join(', ')}.`;
+                    callGemini(prompt, `✨ Explaining ${item.title}`, true); // Pass true to add voice controls
+                }
+                if (button.classList.contains('ai-ideas-btn')) {
+                    const prompt = `I'm learning "${item.title}". The default project is "${item.project.name}". Generate 3 alternative project ideas (easy, medium, hard) to help me master this.`;
+                    callGemini(prompt, `💡 Project Ideas for ${item.title}`); // No voice for this one
+                }
+                if (button.classList.contains('complete-btn')) {
+                    const wasAlreadyComplete = completedLevels.includes(index);
+                    if (wasAlreadyComplete) {
+                        completedLevels = completedLevels.filter(i => i !== index);
+                    } else {
+                        completedLevels.push(index);
+                        
+                        // Check for final completion
+                        if (completedLevels.length === roadmapData.length) {
+                             triggerReward("MERN MASTER!");
+                        } else {
+                             triggerReward("LEVEL COMPLETE!");
+                        }
+                    }
+                    localStorage.setItem('completedMernLevels', JSON.stringify(completedLevels));
+                    renderLevels();
+                    hideModal();
+                }
+            });
+
+            renderLevels();
+        });
+    </script>
+</body>
+</html>
