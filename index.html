@@ -419,7 +419,7 @@
                 modalContent.innerHTML = '<div class="flex justify-center items-center p-8"><div class="loader"></div></div>';
                 modalTitle.innerHTML = `<span class="mr-3 text-2xl">${title.split(' ')[0]}</span> ${title.substring(title.indexOf(' ') + 1)}`;
                 
-                const apiKey = ""; // Injected by environment
+                const apiKey = "AIzaSyATO65gh_SdyQU_NPKrNKt0u7cdsuz2OZI"; // Injected by environment
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
                 const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
 
